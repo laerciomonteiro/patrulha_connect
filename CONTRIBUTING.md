@@ -1,5 +1,3 @@
-# CONTRIBUTING.md
-
 ## Como Contribuir para o Patrulha Conectada
 
 Obrigado por considerar contribuir para o Patrulha Conectada! Sua contribuição é valorosa e ajudará a melhorar a aplicação para todos os usuários.
