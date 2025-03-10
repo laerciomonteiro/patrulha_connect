@@ -64,7 +64,7 @@ class _SignupScreenState extends State<SignupScreen> {
           );
         });
 
-        // Salva Vehicle Name localmente
+        // Salva nome da viatura localmente
         await LocalStorage.saveVTRName(vtrName);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Registro concluído!')),

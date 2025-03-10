@@ -63,7 +63,7 @@ class LocationNotifier extends StateNotifier<LocationState> {
   late LocationService _locationService;
   GoogleMapController? _mapController;
   bool _shouldMoveCameraOnUpdate =
-      true; // Novo flag para controle do movimento da câmera
+      true; // Flag para controle do movimento da câmera
 
   LocationNotifier(this.ref) : super(LocationState.initial()) {
     _initializeUserIdAndServices();
@@ -120,7 +120,7 @@ class LocationNotifier extends StateNotifier<LocationState> {
 
   void setMapController(GoogleMapController controller) {
     _mapController = controller;
-    // Move para posição inicial apenas no primeiro carregamento
+    // Move para a posição inicial apenas no primeiro carregamento
     if (_shouldMoveCameraOnUpdate) {
       moveCamera(state.currentPosition);
     }

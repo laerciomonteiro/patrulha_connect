@@ -8,14 +8,14 @@ class VTRNameScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Define Vehicle Name')),
+      appBar: AppBar(title: Text('Definir o nome da viatura')),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Form(
           child: Column(
             children: [
               TextFormField(
-                decoration: InputDecoration(labelText: 'Vehicle Name'),
+                decoration: InputDecoration(labelText: 'Nome da viatura'),
                 textCapitalization: TextCapitalization.characters,
                 validator: (value) {
                   if (value == null || value.isEmpty) {
@@ -26,7 +26,7 @@ class VTRNameScreen extends StatelessWidget {
               ),
               ElevatedButton(
                 onPressed: () {
-                  // Salvar o vehicle name e voltar para a HomeScreen
+                  // Salvar o nome da viatura e voltar para a HomeScreen
                 },
                 child: Text('Save'),
               ),

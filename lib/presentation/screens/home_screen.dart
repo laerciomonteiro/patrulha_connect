@@ -1,13 +1,10 @@
 import 'dart:async';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:patrulha_conectada/application/providers/location_provider.dart';
-import 'package:patrulha_conectada/presentation/screens/vtr_name_dialog.dart';
-
 import '../../data/repositories/vehicle_repository.dart';
 import 'package:patrulha_conectada/presentation/screens/login_screen.dart';
 
@@ -18,7 +15,6 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   bool _isLoading = true;
-  bool _isNameSet = false;
 
   @override
   void initState() {
@@ -36,7 +32,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Future<void> _initializeUser(String userId) async {
-    // Tente obter o documento do usuário com um pequeno timeout
+    // Tenta obter o documento do usuário com um pequeno timeout
     DocumentSnapshot userDoc;
     try {
       userDoc = await FirebaseFirestore.instance
@@ -45,7 +41,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           .get()
           .timeout(const Duration(milliseconds: 500));
     } on TimeoutException {
-      // Se o documento não for encontrado no timeout, assuma que ainda está sendo criado
+      // Se o documento não for encontrado no timeout, assume que ainda está sendo criado
       await Future.delayed(const Duration(seconds: 1));
       userDoc = await FirebaseFirestore.instance
           .collection('users')
@@ -54,7 +50,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
 
     if (!userDoc.exists) {
-      // Com a lógica atual, o usuário já deve ter sido criado durante o signup/login
       throw Exception('Usuário não encontrado no Firestore');
     }
 
@@ -62,7 +57,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     await LocalStorage.saveVTRName(vtrName);
     setState(() {
       _isLoading = false;
-      _isNameSet = true;
     });
   }
 

@@ -61,7 +61,7 @@ void onStart(ServiceInstance service) async {
   }
 
   // Inicialização do Firebase no isolate de background
-  await Firebase.initializeApp(); // Adicionado
+  await Firebase.initializeApp();
 
   final userId = await LocalStorage.getVTRName() ?? '';
   final api = ApiDataSource();
@@ -70,7 +70,6 @@ void onStart(ServiceInstance service) async {
   // Stream para receber atualizações de outras viaturas
   final StreamSubscription<List<VehicleLocation>> vehiclesSub =
       api.getLocations().listen((locations) {
-    // Implemente o processamento das localizações recebidas
     _processVehicleLocations(locations);
   });
 
@@ -120,7 +119,7 @@ void onStart(ServiceInstance service) async {
 
 // Função para processar localizações recebidas
 void _processVehicleLocations(List<VehicleLocation> locations) {
-  // Implemente sua lógica de atualização de interface/mapa aqui
+  // Implementar futuramente lógica de atualização de interface/mapa aqui
 }
 
 @pragma('vm:entry-point')
