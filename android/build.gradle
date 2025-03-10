@@ -1,0 +1,29 @@
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+        maven {
+            url 'https://storage.googleapis.com/download.flutter.io'
+        }
+    }
+}
+
+rootProject.buildDir = "../build"
+
+dependencies {
+}
+
+subprojects {
+    project.buildDir = "${rootProject.buildDir}/${project.name}"
+}
+subprojects {
+    project.evaluationDependsOn(":app")
+}
+
+/*buildscript {
+    ext.kotlin_version = '2.1.10' // Última versão estável em fevereiro/2025
+}*/
+
+tasks.register("clean", Delete) {
+    delete rootProject.buildDir
+}
