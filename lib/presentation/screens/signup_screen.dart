@@ -42,27 +42,32 @@ class _SignupScreenState extends State<SignupScreen> {
         String userId = userCredential.user!.uid;
         String vtrName = _vtrNameController.text;
 
-        // Salvar informações do usuário e localização
-        await FirebaseFirestore.instance.runTransaction((transaction) async {
-          // Salva informações do usuário
-          await transaction.set(
-            FirebaseFirestore.instance.collection('users').doc(userId),
-            {
-              'vtrName': vtrName,
-              'email': _emailController.text,
-            },
-          );
+        // Salvar informações do usuário diretamente, sem transação
+        try {
+          print("Tentando salvar documento do usuário...");
+          await FirebaseFirestore.instance.collection('users').doc(userId).set({
+            'vtrName': vtrName,
+            'email': _emailController.text,
+          });
+          print("Documento do usuário salvo com sucesso!");
+        } catch (e) {
+          print("Erro ao salvar documento do usuário: $e");
+          throw Exception("Erro ao salvar documento do usuário: $e");
+        }
 
-          // Salva localização inicial
-          await transaction.set(
-            FirebaseFirestore.instance.collection('locations').doc(vtrName),
-            {
-              'latitude': 0.0,
-              'longitude': 0.0,
-              'timestamp': FieldValue.serverTimestamp(),
-            },
-          );
-        });
+        // Salvar localização inicial em uma operação separada
+        try {
+          print("Tentando salvar localização inicial...");
+          await FirebaseFirestore.instance.collection('locations').doc(vtrName).set({
+            'latitude': 0.0,
+            'longitude': 0.0,
+            'timestamp': FieldValue.serverTimestamp(),
+          });
+          print("Localização inicial salva com sucesso!");
+        } catch (e) {
+          print("Erro ao salvar localização inicial: $e");
+          throw Exception("Erro ao salvar localização inicial: $e");
+        }
 
         // Salva nome da viatura localmente
         await LocalStorage.saveVTRName(vtrName);
@@ -72,8 +77,18 @@ class _SignupScreenState extends State<SignupScreen> {
         Navigator.of(context).pop();
       } on FirebaseAuthException catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.message ?? 'Erro ao cadastrar')),
+          SnackBar(content: Text(e.message ?? 'Erro ao criar usuário')),
         );
+      } catch (e) {
+        // Detecção de erros gerais, provavelmente de transações do Firestore ou LocalStorage
+        print('Error during signup data saving: $e');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao salvar dados do usuário: ${e.toString()}')),
+        );
+        // Opcional: considere excluir o usuário Auth criado aqui se a transação falhar
+        // if (userCredential != null) {
+        //   await userCredential.user?.delete();
+        // }
       }
     }
   }

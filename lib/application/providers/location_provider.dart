@@ -70,16 +70,29 @@ class LocationNotifier extends StateNotifier<LocationState> {
   }
 
   Future<void> _initializeUserIdAndServices() async {
-    final vtrName = await LocalStorage.getVTRName();
-    if (vtrName == null || vtrName.isEmpty) {
-      throw Exception('Nome da viatura não definido.');
-    }
+    try {
+      final vtrName = await LocalStorage.getVTRName();
+      if (vtrName == null || vtrName.isEmpty) {
+        print('ERRO: Nome da viatura não definido no LocalStorage.');
+        return; // Não inicializa mais nada se não tiver nome da viatura
+      }
 
-    userId = vtrName;
-    _apiDataSource = ApiDataSource();
-    _locationService = LocationService(userId);
-    await initializeBackgroundService();
-    _initTracking();
+      userId = vtrName;
+      _apiDataSource = ApiDataSource();
+      _locationService = LocationService(userId);
+      
+      try {
+        await initializeBackgroundService();
+      } catch (e) {
+        print('Erro ao inicializar serviço em background: $e');
+        // Continua mesmo com erro no serviço background
+      }
+      
+      _initTracking();
+    } catch (e) {
+      print('Erro na inicialização do provedor de localização: $e');
+      // Em caso de erro, ainda mantém o estado inicial
+    }
   }
 
   void _initTracking() {

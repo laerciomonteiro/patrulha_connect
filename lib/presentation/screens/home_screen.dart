@@ -32,32 +32,69 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Future<void> _initializeUser(String userId) async {
-    // Tenta obter o documento do usuário com um pequeno timeout
-    DocumentSnapshot userDoc;
     try {
-      userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(userId)
-          .get()
-          .timeout(const Duration(milliseconds: 500));
-    } on TimeoutException {
-      // Se o documento não for encontrado no timeout, assume que ainda está sendo criado
-      await Future.delayed(const Duration(seconds: 1));
-      userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(userId)
-          .get();
-    }
+      DocumentSnapshot userDoc;
+      try {
+        userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(userId)
+            .get()
+            .timeout(const Duration(milliseconds: 500)); // Reduced timeout
+      } on TimeoutException {
+        // If the document is not found in the initial timeout, try again with a longer delay
+        await Future.delayed(const Duration(seconds: 2)); // Increased delay for retry
+        userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(userId)
+            .get();
+      }
 
-    if (!userDoc.exists) {
-      throw Exception('Usuário não encontrado no Firestore');
-    }
+      if (!userDoc.exists) {
+        print('Error: User document not found in Firestore for user ID: $userId');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Erro ao carregar dados do usuário. Tente novamente.')),
+          );
+          setState(() {
+            _isLoading = false;
+          });
+        }
+        return;
+      }
 
-    String vtrName = userDoc['vtrName'];
-    await LocalStorage.saveVTRName(vtrName);
-    setState(() {
-      _isLoading = false;
-    });
+      final userData = userDoc.data() as Map<String, dynamic>?;
+      if (userData == null || !userData.containsKey('vtrName')) {
+        print('Error: vtrName not found in user document for user ID: $userId');
+        if (mounted) {
+           ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Nome da VTR não configurado para este usuário.')),
+          );
+          setState(() {
+            _isLoading = false;
+          });
+        }
+        return;
+      }
+
+      String vtrName = userData['vtrName'];
+      await LocalStorage.saveVTRName(vtrName);
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    } catch (e, stackTrace) {
+      print('Error in _initializeUser: $e');
+      print('Stack trace: $stackTrace');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Ocorreu um erro inesperado: ${e.toString()}')),
+        );
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   /*Future<void> _checkVTRName() async {
@@ -120,13 +157,121 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       );
     }
 
-    /*if (!_isNameSet) {
-      return const Scaffold(
-        body: Center(child: Text('Nome da viatura não definido.')),
-      );
-    }*/
-
+    // Acessa o estado de localização do provider
     final locationState = ref.watch(locationProvider);
+    
+    // Verifica se o Google Maps está renderizando corretamente
+    // Se não tivermos marcadores e estivermos na posição inicial, pode indicar um problema
+    bool mapHasIssue = locationState.allMarkers.length <= 1 && 
+                       locationState.currentPosition.latitude == -3.71722 && 
+                       locationState.currentPosition.longitude == -38.54333;
+    
+    if (mapHasIssue) {
+      // Oferece opção de recuperação para o usuário
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Patrulha Conectada'),
+          backgroundColor: Colors.blue[800],
+        ),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text(
+                'Não foi possível carregar o mapa corretamente.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 18),
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton(
+                onPressed: () async {
+                  // Solicitar que o usuário informe o nome da viatura novamente
+                  final user = FirebaseAuth.instance.currentUser;
+                  if (user != null) {
+                    final TextEditingController controller = TextEditingController();
+                    final result = await showDialog<String>(
+                      context: context,
+                      barrierDismissible: false,
+                      builder: (context) => AlertDialog(
+                        title: const Text('Identificação da Viatura'),
+                        content: TextField(
+                          controller: controller,
+                          decoration: const InputDecoration(
+                            hintText: 'Ex: POG-4444',
+                            labelText: 'Nome da Viatura',
+                          ),
+                          textCapitalization: TextCapitalization.characters,
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('Cancelar'),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, controller.text),
+                            child: const Text('Confirmar'),
+                          ),
+                        ],
+                      ),
+                    );
+                    
+                    if (result != null && result.isNotEmpty) {
+                      try {
+                        // Atualiza o documento do usuário com o novo nome de viatura
+                        await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+                          'vtrName': result,
+                          'email': user.email,
+                        });
+                        
+                        // Cria localização inicial
+                        await FirebaseFirestore.instance.collection('locations').doc(result).set({
+                          'latitude': 0.0,
+                          'longitude': 0.0,
+                          'timestamp': FieldValue.serverTimestamp(),
+                        });
+                        
+                        // Salva localmente
+                        await LocalStorage.saveVTRName(result);
+                        
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Viatura configurada com sucesso!')),
+                        );
+                        
+                        // Recarrega a tela
+                        if (mounted) {
+                          Navigator.pushReplacement(
+                            context, 
+                            MaterialPageRoute(builder: (context) => HomeScreen())
+                          );
+                        }
+                      } catch (e) {
+                        print('Erro ao configurar viatura: $e');
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Erro ao configurar viatura: ${e.toString()}')),
+                        );
+                      }
+                    }
+                  }
+                },
+                child: const Text('Configurar Viatura'),
+              ),
+              const SizedBox(height: 10),
+              TextButton(
+                onPressed: () {
+                  // Logout e retorno para tela de login
+                  FirebaseAuth.instance.signOut();
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(builder: (context) => LoginScreen()),
+                  );
+                },
+                child: const Text('Voltar para Login'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(
