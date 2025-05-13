@@ -49,7 +49,7 @@
 
         <meta-data
             android:name="com.google.android.geo.API_KEY"
-            android:value="SUA CHAVE DO GOOGLE MAPS AQUI" />
+            android:value="AIzaSyCCbo_Dutv_mj3VU9qeODEr60SPLCif--s" />
 
         <activity
             android:name=".MainActivity"

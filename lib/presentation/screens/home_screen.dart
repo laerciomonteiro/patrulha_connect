@@ -5,8 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:patrulha_conectada/application/providers/location_provider.dart';
+import 'package:patrulha_conectada/application/providers/patrol_stats_provider.dart';
 import '../../data/repositories/vehicle_repository.dart';
 import 'package:patrulha_conectada/presentation/screens/login_screen.dart';
+import 'package:patrulha_conectada/presentation/widgets/patrol_stats_card.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   @override
@@ -15,10 +17,13 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   bool _isLoading = true;
+  bool _isMapInitializing = true;
+  Timer? _mapInitTimer;
 
   @override
   void initState() {
     super.initState();
+    // Monitora alterações no estado de autenticação do usuário
     FirebaseAuth.instance.authStateChanges().listen((User? user) {
       if (user == null) {
         Navigator.pushReplacement(
@@ -27,6 +32,40 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         );
       } else {
         _initializeUser(user.uid);
+      }
+    });
+  }
+  
+  @override
+  void dispose() {
+    _mapInitTimer?.cancel(); // Cancela o temporizador se existir
+    super.dispose();
+  }
+  
+  // Inicia um temporizador para lidar com casos em que o mapa não inicializa corretamente
+  void _startMapInitializationTimeout() {
+    if (_mapInitTimer != null) return; // Define o temporizador apenas uma vez
+    
+    _mapInitTimer = Timer(const Duration(seconds: 8), () {
+      if (mounted) {
+        setState(() {
+          // Se ainda estamos na posição inicial após 8 segundos,
+          // provavelmente temos um problema com permissões de localização ou carregamento do mapa
+          if (_isMapInitializing) {
+            _isMapInitializing = false;
+            
+            // Exibe uma mensagem para o usuário
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Não foi possível obter sua localização. Verifique as permissões do app.'),
+                duration: Duration(seconds: 5),
+              ),
+            );
+            
+            // Força uma recarga do provedor de localização
+            ref.invalidate(locationProvider);
+          }
+        });
       }
     });
   }
@@ -39,10 +78,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             .collection('users')
             .doc(userId)
             .get()
-            .timeout(const Duration(milliseconds: 500)); // Reduced timeout
+            .timeout(const Duration(milliseconds: 500)); // Temporizador reduzido
       } on TimeoutException {
-        // If the document is not found in the initial timeout, try again with a longer delay
-        await Future.delayed(const Duration(seconds: 2)); // Increased delay for retry
+        // Se o documento não for encontrado no temporizador inicial, tenta novamente com um atraso maior
+        await Future.delayed(const Duration(seconds: 2)); // Atraso aumentado para nova tentativa
         userDoc = await FirebaseFirestore.instance
             .collection('users')
             .doc(userId)
@@ -50,7 +89,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       }
 
       if (!userDoc.exists) {
-        print('Error: User document not found in Firestore for user ID: $userId');
+        print('Erro: Documento de usuário não encontrado no Firestore para ID: $userId');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Erro ao carregar dados do usuário. Tente novamente.')),
@@ -64,7 +103,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
       final userData = userDoc.data() as Map<String, dynamic>?;
       if (userData == null || !userData.containsKey('vtrName')) {
-        print('Error: vtrName not found in user document for user ID: $userId');
+        print('Erro: vtrName não encontrado no documento de usuário para ID: $userId');
         if (mounted) {
            ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Nome da VTR não configurado para este usuário.')),
@@ -84,8 +123,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         });
       }
     } catch (e, stackTrace) {
-      print('Error in _initializeUser: $e');
-      print('Stack trace: $stackTrace');
+      print('Erro em _initializeUser: $e');
+      print('Rastreamento de pilha: $stackTrace');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Ocorreu um erro inesperado: ${e.toString()}')),
@@ -148,6 +187,33 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   void _onMapCreated(GoogleMapController controller) {
     ref.read(locationProvider.notifier).setMapController(controller);
   }
+  
+  // Variável de estado para controlar se o cartão de estatísticas está expandido
+  bool _isStatsCardExpanded = false;
+  
+  Widget _buildPatrolStatsCard() {
+    final stats = ref.watch(patrolStatsProvider);
+    
+    return Positioned(
+      top: 0,
+      left: 0,
+      right: 0,
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.only(top: 8.0),
+          child: PatrolStatsCard(
+            stats: stats,
+            isExpanded: _isStatsCardExpanded,
+            onToggleExpanded: () {
+              setState(() {
+                _isStatsCardExpanded = !_isStatsCardExpanded;
+              });
+            },
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -157,17 +223,31 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       );
     }
 
-    // Acessa o estado de localização do provider
+    // Acessa o estado de localização do provedor
     final locationState = ref.watch(locationProvider);
     
     // Verifica se o Google Maps está renderizando corretamente
-    // Se não tivermos marcadores e estivermos na posição inicial, pode indicar um problema
-    bool mapHasIssue = locationState.allMarkers.length <= 1 && 
-                       locationState.currentPosition.latitude == -3.71722 && 
-                       locationState.currentPosition.longitude == -38.54333;
+    // Consideramos problema apenas se não houver marcadores após um tempo razoável
+    bool mapHasIssue = false;
+    
+    // Verificamos se ainda estamos na posição inicial após alguns segundos de carregamento
+    if (_isMapInitializing) {
+      // Verifica se a posição é a padrão inicial
+      bool isDefaultPosition = locationState.currentPosition.latitude == -3.71722 && 
+                              locationState.currentPosition.longitude == -38.54333;
+      
+      if (isDefaultPosition) {
+        // Posição inicial padrão indica que não recebemos atualização de localização ainda
+        _startMapInitializationTimeout();
+      } else {
+        // Recebemos uma posição válida do GPS, então o mapa está funcionando
+        _isMapInitializing = false;
+        print('Mapa inicializado com posição real do GPS');
+      }
+    }
     
     if (mapHasIssue) {
-      // Oferece opção de recuperação para o usuário
+      // Fornece opção de recuperação para o usuário
       return Scaffold(
         appBar: AppBar(
           title: const Text('Patrulha Conectada'),
@@ -283,19 +363,48 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         backgroundColor: Colors.blue[800],
         elevation: 4,
       ),
-      body: GoogleMap(
-        onMapCreated: _onMapCreated,
-        initialCameraPosition: CameraPosition(
-          target: locationState.currentPosition,
-          zoom: 14,
-        ),
-        markers: locationState.allMarkers,
-        myLocationEnabled: true,
+      body: Stack(
+        children: [
+          // Google Map como camada base
+          GoogleMap(
+            onMapCreated: _onMapCreated,
+            initialCameraPosition: CameraPosition(
+              target: locationState.currentPosition,
+              zoom: 14,
+            ),
+            markers: locationState.allMarkers,
+            myLocationEnabled: true,
+          ),
+          
+          // Cartão de estatísticas de patrulha na parte superior da tela
+          _buildPatrolStatsCard(),
+        ],
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => ref
-            .read(locationProvider.notifier)
-            .moveCamera(locationState.currentPosition),
+        onPressed: () {
+          // Verifica se a posição atual não é a padrão
+          bool isDefaultPosition = locationState.currentPosition.latitude == -3.71722 && 
+                                   locationState.currentPosition.longitude == -38.54333;
+          
+          if (!isDefaultPosition) {
+            // Se temos uma posição válida, move a câmera para ela
+            ref.read(locationProvider.notifier).moveCamera(locationState.currentPosition);
+          } else {
+            // Caso contrário, solicita uma nova posição do GPS
+            print('Tentando obter nova localização do GPS...');
+            
+            // Mostrar feedback para o usuário
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Aguarde enquanto obtemos sua localização atual...'),
+                duration: Duration(seconds: 2),
+              ),
+            );
+            
+            // Forçar uma solicitação de posição atual
+            ref.invalidate(locationProvider);
+          }
+        },
         child: const Icon(Icons.my_location, size: 32),
         backgroundColor: Colors.white,
         elevation: 5,

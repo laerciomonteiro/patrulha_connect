@@ -48,6 +48,7 @@ dependencies:
   firebase_auth: ^5.5.0
   firebase_auth_platform_interface: ^7.6.0
   firebase_ui_auth: ^1.16.1
+  intl: ^0.19.0
 
 dev_dependencies:
   flutter_launcher_icons: ^0.14.3

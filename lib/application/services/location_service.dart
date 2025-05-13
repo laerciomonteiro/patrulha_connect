@@ -7,7 +7,7 @@ class LocationService {
   final ApiDataSource _apiDataSource;
   final String userId;
   LatLng? _lastSentPosition;
-  final StreamController<LatLng> _locationStreamController = StreamController();
+  final StreamController<LatLng> _locationStreamController = StreamController.broadcast();
   bool _isUpdating = false;
 
   LocationService(this.userId) : _apiDataSource = ApiDataSource();
@@ -73,6 +73,52 @@ class LocationService {
         (newLocation.longitude - _lastSentPosition!.longitude).abs();
 
     return latDiff > minChange || lngDiff > minChange;
+  }
+
+  // Método para solicitar explicitamente uma nova posição do GPS
+  Future<void> requestCurrentPosition() async {
+    print('Solicitando atualização imediata de posição GPS...');
+    
+    try {
+      // Verifica e solicita permissões
+      LocationPermission permission = await Geolocator.checkPermission();
+
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission != LocationPermission.whileInUse && 
+            permission != LocationPermission.always) {
+          print('Permissão de localização negada pelo usuário');
+          return;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        print('Permissão de localização negada permanentemente');
+        await Geolocator.openAppSettings();
+        return;
+      }
+
+      // Obtém a posição atual com alta prioridade e precisão
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+        timeLimit: const Duration(seconds: 5), // Timeout mais curto para resposta rápida
+      );
+
+      LatLng newLocation = LatLng(position.latitude, position.longitude);
+      
+      // Atualiza a posição no servidor
+      await _apiDataSource.updateLocation(userId, newLocation);
+      _lastSentPosition = newLocation;
+      
+      // Notifica os ouvintes sobre a nova posição
+      if (!_locationStreamController.isClosed) {
+        _locationStreamController.add(newLocation);
+        print('Nova posição obtida e propagada: ${newLocation.latitude}, ${newLocation.longitude}');
+      }
+    } catch (e) {
+      print('Erro ao solicitar posição atual: $e');
+      // Não relanças a exceção para evitar crash
+    }
   }
 
   void dispose() {
