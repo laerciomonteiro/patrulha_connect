@@ -8,7 +8,7 @@ import 'package:patrulha_conectada/application/providers/location_provider.dart'
 import 'package:patrulha_conectada/application/providers/patrol_stats_provider.dart';
 import '../../data/repositories/vehicle_repository.dart';
 import 'package:patrulha_conectada/presentation/screens/login_screen.dart';
-import 'package:patrulha_conectada/presentation/widgets/patrol_stats_card.dart';
+import 'package:patrulha_conectada/presentation/widgets/metric_card.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   @override
@@ -35,17 +35,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       }
     });
   }
-  
+
   @override
   void dispose() {
     _mapInitTimer?.cancel(); // Cancela o temporizador se existir
     super.dispose();
   }
-  
+
   // Inicia um temporizador para lidar com casos em que o mapa não inicializa corretamente
   void _startMapInitializationTimeout() {
     if (_mapInitTimer != null) return; // Define o temporizador apenas uma vez
-    
+
     _mapInitTimer = Timer(const Duration(seconds: 8), () {
       if (mounted) {
         setState(() {
@@ -53,15 +53,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           // provavelmente temos um problema com permissões de localização ou carregamento do mapa
           if (_isMapInitializing) {
             _isMapInitializing = false;
-            
+
             // Exibe uma mensagem para o usuário
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text('Não foi possível obter sua localização. Verifique as permissões do app.'),
+                content: Text(
+                    'Não foi possível obter sua localização. Verifique as permissões do app.'),
                 duration: Duration(seconds: 5),
               ),
             );
-            
+
             // Força uma recarga do provedor de localização
             ref.invalidate(locationProvider);
           }
@@ -78,10 +79,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             .collection('users')
             .doc(userId)
             .get()
-            .timeout(const Duration(milliseconds: 500)); // Temporizador reduzido
+            .timeout(
+                const Duration(milliseconds: 500)); // Temporizador reduzido
       } on TimeoutException {
         // Se o documento não for encontrado no temporizador inicial, tenta novamente com um atraso maior
-        await Future.delayed(const Duration(seconds: 2)); // Atraso aumentado para nova tentativa
+        await Future.delayed(
+            const Duration(seconds: 2)); // Atraso aumentado para nova tentativa
         userDoc = await FirebaseFirestore.instance
             .collection('users')
             .doc(userId)
@@ -89,10 +92,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       }
 
       if (!userDoc.exists) {
-        print('Erro: Documento de usuário não encontrado no Firestore para ID: $userId');
+        print(
+            'Erro: Documento de usuário não encontrado no Firestore para ID: $userId');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Erro ao carregar dados do usuário. Tente novamente.')),
+            const SnackBar(
+                content: Text(
+                    'Erro ao carregar dados do usuário. Tente novamente.')),
           );
           setState(() {
             _isLoading = false;
@@ -103,10 +109,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
       final userData = userDoc.data() as Map<String, dynamic>?;
       if (userData == null || !userData.containsKey('vtrName')) {
-        print('Erro: vtrName não encontrado no documento de usuário para ID: $userId');
+        print(
+            'Erro: vtrName não encontrado no documento de usuário para ID: $userId');
         if (mounted) {
-           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Nome da VTR não configurado para este usuário.')),
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+                content:
+                    Text('Nome da VTR não configurado para este usuário.')),
           );
           setState(() {
             _isLoading = false;
@@ -127,7 +136,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       print('Rastreamento de pilha: $stackTrace');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Ocorreu um erro inesperado: ${e.toString()}')),
+          SnackBar(
+              content: Text('Ocorreu um erro inesperado: ${e.toString()}')),
         );
         setState(() {
           _isLoading = false;
@@ -135,84 +145,73 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       }
     }
   }
-
-  /*Future<void> _checkVTRName() async {
-    final vtrName = await LocalStorage.getVTRName();
-    if (vtrName == null || vtrName.isEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback((_) async {
-        await _showVTRNameDialogUntilValid();
-      });
-    } else {
-      final isRegistered = await ApiDataSource().isVehicleNameRegistered(vtrName);
-      if (!isRegistered) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Nome "$vtrName" não está registrado no sistema.')),
-        );
-        await LocalStorage.saveVTRName('');
-        setState(() => _isLoading = false);
-        return;
-      }
-      setState(() {
-        _isNameSet = true;
-        _isLoading = false;
-      });
-    }
-  }*/
-
-  /*Future<void> _showVTRNameDialogUntilValid() async {
-    String? newName;
-    bool isNameValid = false;
-    while (!isNameValid) {
-      newName = await showVTRNameDialog(context);
-      if (newName == null || newName.isEmpty) return;
-
-      final isRegistered = await ApiDataSource().isVehicleNameRegistered(newName);
-      if (isRegistered) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Nome "$newName" já está em uso. Escolha outro.')),
-        );
-      } else {
-        isNameValid = true;
-        await LocalStorage.saveVTRName(newName!);
-        await ApiDataSource().updateLocation(newName, const LatLng(0, 0));
-        setState(() {
-          _isNameSet = true;
-          _isLoading = false;
-        });
-        ref.invalidate(locationProvider);
-      }
-    }
-  }*/
 
   void _onMapCreated(GoogleMapController controller) {
     ref.read(locationProvider.notifier).setMapController(controller);
   }
-  
-  // Variável de estado para controlar se o cartão de estatísticas está expandido
-  bool _isStatsCardExpanded = false;
-  
-  Widget _buildPatrolStatsCard() {
+
+  // Função para mover a câmera para a posição atual
+  void _moveCameraToCurrentPosition(LatLng position) {
+    ref.read(locationProvider.notifier).moveCamera(position);
+
+    // Feedback visual para o usuário
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Text('Centralizando na posição atual'),
+      duration: Duration(seconds: 1),
+    ));
+  }
+
+  Widget _buildMetricCards() {
     final stats = ref.watch(patrolStatsProvider);
-    
-    return Positioned(
-      top: 0,
-      left: 0,
-      right: 0,
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.only(top: 8.0),
-          child: PatrolStatsCard(
-            stats: stats,
-            isExpanded: _isStatsCardExpanded,
-            onToggleExpanded: () {
-              setState(() {
-                _isStatsCardExpanded = !_isStatsCardExpanded;
-              });
-            },
+
+    return Container(
+      height: 120,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: EdgeInsets.symmetric(horizontal: 16),
+        children: [
+          MetricCard(
+            icon: Icons.groups,
+            color: Colors.green,
+            title: 'Próximas',
+            value: '${stats.nearbyUnits}',
+            subtitle: 'Viaturas próximas',
+            onTap: () {},
           ),
-        ),
+          MetricCard(
+            icon: Icons.directions_car,
+            color: Colors.orange,
+            title: 'Distância',
+            value: '${stats.distanceTraveled.toStringAsFixed(1)} km',
+            subtitle: '${(stats.distanceTraveled / 0.2).round()} min',
+            onTap: () {},
+          ),
+          MetricCard(
+            icon: Icons.timer,
+            color: Colors.purple.shade400,
+            title: 'Patrulha',
+            value: _formatDuration(stats.patrolDuration),
+            subtitle: stats.isMoving ? 'Em movimento' : 'Parado',
+            onTap: () {},
+          ),
+          MetricCard(
+            icon: Icons.speed,
+            color: Colors.pink,
+            title: 'Velocidade',
+            value: '${stats.averageSpeed.toStringAsFixed(1)}',
+            subtitle: 'km/h média',
+            onTap: () {},
+          ),
+        ],
       ),
     );
+  }
+
+  String _formatDuration(Duration duration) {
+    String twoDigits(int n) => n.toString().padLeft(2, '0');
+    String twoDigitMinutes = twoDigits(duration.inMinutes.remainder(60));
+    String twoDigitHours = twoDigits(duration.inHours);
+    return '$twoDigitHours:$twoDigitMinutes hrs';
   }
 
   @override
@@ -225,17 +224,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     // Acessa o estado de localização do provedor
     final locationState = ref.watch(locationProvider);
-    
+
     // Verifica se o Google Maps está renderizando corretamente
     // Consideramos problema apenas se não houver marcadores após um tempo razoável
     bool mapHasIssue = false;
-    
+
     // Verificamos se ainda estamos na posição inicial após alguns segundos de carregamento
     if (_isMapInitializing) {
       // Verifica se a posição é a padrão inicial
-      bool isDefaultPosition = locationState.currentPosition.latitude == -3.71722 && 
-                              locationState.currentPosition.longitude == -38.54333;
-      
+      bool isDefaultPosition =
+          locationState.currentPosition.latitude == -3.71722 &&
+              locationState.currentPosition.longitude == -38.54333;
+
       if (isDefaultPosition) {
         // Posição inicial padrão indica que não recebemos atualização de localização ainda
         _startMapInitializationTimeout();
@@ -245,7 +245,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         print('Mapa inicializado com posição real do GPS');
       }
     }
-    
+
     if (mapHasIssue) {
       // Fornece opção de recuperação para o usuário
       return Scaffold(
@@ -268,7 +268,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   // Solicitar que o usuário informe o nome da viatura novamente
                   final user = FirebaseAuth.instance.currentUser;
                   if (user != null) {
-                    final TextEditingController controller = TextEditingController();
+                    final TextEditingController controller =
+                        TextEditingController();
                     final result = await showDialog<String>(
                       context: context,
                       barrierDismissible: false,
@@ -288,46 +289,57 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             child: const Text('Cancelar'),
                           ),
                           TextButton(
-                            onPressed: () => Navigator.pop(context, controller.text),
+                            onPressed: () =>
+                                Navigator.pop(context, controller.text),
                             child: const Text('Confirmar'),
                           ),
                         ],
                       ),
                     );
-                    
+
                     if (result != null && result.isNotEmpty) {
                       try {
                         // Atualiza o documento do usuário com o novo nome de viatura
-                        await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+                        await FirebaseFirestore.instance
+                            .collection('users')
+                            .doc(user.uid)
+                            .set({
                           'vtrName': result,
                           'email': user.email,
                         });
-                        
+
                         // Cria localização inicial
-                        await FirebaseFirestore.instance.collection('locations').doc(result).set({
+                        await FirebaseFirestore.instance
+                            .collection('locations')
+                            .doc(result)
+                            .set({
                           'latitude': 0.0,
                           'longitude': 0.0,
                           'timestamp': FieldValue.serverTimestamp(),
                         });
-                        
+
                         // Salva localmente
                         await LocalStorage.saveVTRName(result);
-                        
+
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Viatura configurada com sucesso!')),
+                          const SnackBar(
+                              content:
+                                  Text('Viatura configurada com sucesso!')),
                         );
-                        
+
                         // Recarrega a tela
                         if (mounted) {
                           Navigator.pushReplacement(
-                            context, 
-                            MaterialPageRoute(builder: (context) => HomeScreen())
-                          );
+                              context,
+                              MaterialPageRoute(
+                                  builder: (context) => HomeScreen()));
                         }
                       } catch (e) {
                         print('Erro ao configurar viatura: $e');
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Erro ao configurar viatura: ${e.toString()}')),
+                          SnackBar(
+                              content: Text(
+                                  'Erro ao configurar viatura: ${e.toString()}')),
                         );
                       }
                     }
@@ -374,50 +386,61 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
             markers: locationState.allMarkers,
             myLocationEnabled: true,
+            zoomControlsEnabled: false,
+            mapToolbarEnabled: false,
           ),
-          
-          // Cartão de estatísticas de patrulha na parte superior da tela
-          _buildPatrolStatsCard(),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          // Verifica se a posição atual não é a padrão
-          bool isDefaultPosition = locationState.currentPosition.latitude == -3.71722 && 
-                                   locationState.currentPosition.longitude == -38.54333;
-          
-          if (!isDefaultPosition) {
-            // Se temos uma posição válida, move a câmera para ela
-            ref.read(locationProvider.notifier).moveCamera(locationState.currentPosition);
-          } else {
-            // Caso contrário, solicita uma nova posição do GPS
-            print('Tentando obter nova localização do GPS...');
-            
-            // Mostrar feedback para o usuário
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Aguarde enquanto obtemos sua localização atual...'),
-                duration: Duration(seconds: 2),
+
+          // Cartões de métricas
+          Positioned(
+            top: 20,
+            left: 0,
+            right: 0,
+            child: _buildMetricCards(),
+          ),
+
+          // Botão para centralizar na posição atual
+          Positioned(
+            bottom: 40,
+            right: 0,
+            left: 0,
+            child: Center(
+              child: Material(
+                elevation: 6,
+                borderRadius: BorderRadius.circular(30),
+                color: Colors.blue[800],
+                child: InkWell(
+                  onTap: () => _moveCameraToCurrentPosition(
+                      locationState.currentPosition),
+                  borderRadius: BorderRadius.circular(30),
+                  child: Container(
+                    padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.my_location,
+                          color: Colors.white,
+                        ),
+                        SizedBox(width: 8),
+                        Text(
+                          'CENTRALIZAR',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
-            );
-            
-            // Forçar uma solicitação de posição atual
-            ref.invalidate(locationProvider);
-          }
-        },
-        child: const Icon(Icons.my_location, size: 32),
-        backgroundColor: Colors.white,
-        elevation: 5,
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-      bottomNavigationBar: BottomAppBar(
-        color: Colors.blue[800],
-        shape: const CircularNotchedRectangle(),
-        notchMargin: 0,
-        child: Container(
-          height: 56,
-          alignment: Alignment.center,
-        ),
+            ),
+          ),
+        ],
       ),
     );
   }
